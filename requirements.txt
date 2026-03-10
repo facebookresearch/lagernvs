@@ -1,5 +1,5 @@
 # Core dependencies
-torch==2.6.0
+torch==2.8.0
 torchvision>=0.15.0
 numpy>=1.21.0
 pillow>=9.0.0
