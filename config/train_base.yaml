@@ -1,0 +1,124 @@
+# Training config for general model (Re10k + DL3DV)
+# This is a template for multi-dataset training.
+# To add additional datasets:
+# 1. Preprocess them to match the Re10k or DL3DV format
+# 2. Create a dataset class in data/sources/
+# 3. Register in data/dataset_factory.py
+# 4. Add to subdataset_list below
+
+module: train
+
+seed: 0
+
+opt:
+  lr: 1e-4
+  weight_decay: 0.05
+  num_iter_total: 250001
+  batch_size: 512
+  batch_size_test: 64
+  target_has_input_p: 0.2
+  l2_loss_weight: 1.0
+  perceptual_loss_weight: 0.5
+  grad_clip_norm: 3.0
+  allowed_gradnorm_factor: 5
+  betas:
+  - 0.9
+  - 0.95
+  lr_scheduler: cosine
+  warmup_steps: 3000
+  hold_steps: 0
+  lr_scheduler_iter: 250001
+  cosine_min_range: 0.0
+  freeze_vggt: false
+
+model:
+  model_type: regressive
+  arch: 'EncDecVitB/8'
+  pretrained_vggt: true
+  attention_to_features_type: bidirectional_cross_attention
+
+data:
+  subdataset_list:
+  - name: re10k
+    view_sampler_range:
+    - 25
+    - 192
+    expansion_factor: 1.0
+    equalization_length: 67000
+    normalization_mode: cameras
+  - name: dl3dv
+    view_sampler_range:
+    - 16
+    - 48
+    expansion_factor: 1.0
+    equalization_length: 200000
+    normalization_mode: cameras
+  num_cond_views_aug:
+  - 1
+  - 10
+  aspect_ratio_range:
+  - 0.5
+  - 2.0
+  im_size_hw:
+  - 512
+  - 512
+  num_views: 10
+  zero_out_cam_cond_p: 0.4
+  num_tgt_views: 8
+  view_to_sample_prob:
+    - 1,4
+    - 2,16
+    - 3,4
+    - 4,16
+    - 5,4
+    - 6,16
+    - 7,4
+    - 8,16
+    - 9,2
+    - 10,8
+
+test_data:
+  dataset_names:
+  - re10k
+  - dl3dv
+  - dl3dv
+  - dl3dv
+  dataset_names_log:
+  - re10k_posed
+  - dl3dv_2view
+  - dl3dv_4view
+  - dl3dv_6view
+  zero_out_cam_cond_p:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  test_view_indices_paths:
+  - ./re10k_test_view_indices.json
+  - ./dl3dv_test_view_indices_2v.json
+  - ./dl3dv_test_view_indices_4v.json
+  - ./dl3dv_test_view_indices_6v.json
+  num_cond_views:
+  - 2
+  - 2
+  - 4
+  - 6
+  normalization_mode:
+  - cameras
+  - cameras
+  - cameras
+  - cameras
+
+view_sampler:
+  train_method: bounded_interp
+  test_method: fixed
+
+log_dir: ./output
+
+eval:
+  vis_iter: 1000
+  log_iter: 50
+  eval_iter: 5000
+  ckpt_iter: 5000
+  measure_time: true
+  use_fixed_batch: false

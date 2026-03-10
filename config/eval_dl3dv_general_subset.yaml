@@ -1,0 +1,33 @@
+module: run_eval
+
+seed: 0
+
+eval_data:
+  dataset_name: dl3dv
+  dataset_name_log: dl3dv_6_view_unposed_general_subset
+  # Set to 1.0 for unposed evaluation (unknown source image poses)
+  # Set to 0.0 for posed evaluation (ground truth poses)
+  zero_out_cam_cond_p: 1.0
+  # Path to test view indices JSON file (subset for testing)
+  test_view_indices_path: ./assets/dl3dv_6v_subset.json
+  num_cond_views: 6
+  video_path_type: bspline_interp_eased
+  normalization_mode: cameras
+
+model:
+  arch: 'EncDecVitB/8'
+  attention_to_features_type: bidirectional_cross_attention
+
+opt:
+  batch_size: 64
+
+data:
+  im_size_hw:
+  - 512
+  - 512
+  eval_video_length: 100
+
+# Use locally downloaded checkpoint for testing
+checkpoint_path: /home/sszymanowicz/.cache/huggingface_lagernvs/model.pt
+
+log_dir: ./output

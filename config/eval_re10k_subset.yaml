@@ -1,0 +1,30 @@
+module: run_eval
+
+seed: 0
+
+eval_data:
+  dataset_name: re10k
+  dataset_name_log: re10k_2_view_posed_subset
+  zero_out_cam_cond_p: 0.0
+  test_view_indices_path: ./assets/re10k_2v_subset.json
+  num_cond_views: 2
+  video_path_type: bspline_interp_eased
+  normalization_mode: cameras
+
+model:
+  arch: 'EncDecVitB/8'
+  attention_to_features_type: full_attention
+
+opt:
+  batch_size: 4
+
+data:
+  im_size_hw:
+  - 256
+  - 256
+  eval_video_length: 100
+
+# Local checkpoint path (downloaded with: with-proxy hf download facebook/lagernvs_re10k_2v_256 model.pt --local-dir ~/.cache/huggingface_lagernvs_re10k/)
+checkpoint_path: /home/sszymanowicz/.cache/huggingface_lagernvs_re10k/model.pt
+
+log_dir: ./output

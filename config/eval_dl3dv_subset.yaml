@@ -1,0 +1,31 @@
+module: run_eval
+
+seed: 0
+
+eval_data:
+  dataset_name: dl3dv
+  dataset_name_log: dl3dv_2_view_subset_test
+  zero_out_cam_cond_p: 0.0
+  # Path to test view indices JSON file (subset for testing)
+  test_view_indices_path: ./assets/dl3dv_2v_subset.json
+  num_cond_views: 2
+  video_path_type: bspline_interp_eased
+  normalization_mode: cameras
+
+model:
+  arch: 'EncDecVitB/8'
+  attention_to_features_type: bidirectional_cross_attention
+
+opt:
+  batch_size: 64
+
+data:
+  im_size_hw:
+  - 256
+  - 256
+  eval_video_length: 100
+
+# Use locally downloaded checkpoint
+checkpoint_path: /home/sszymanowicz/.cache/huggingface_lagernvs_dl3dv/model.pt
+
+log_dir: ./output

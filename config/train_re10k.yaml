@@ -1,0 +1,82 @@
+module: train
+
+seed: 0
+
+opt:
+  lr: 4e-4
+  weight_decay: 0.05
+  num_iter_total: 100001
+  batch_size: 64
+  batch_size_test: 64
+  target_has_input_p: 1.0
+  l2_loss_weight: 1.0
+  perceptual_loss_weight: 0.5
+  grad_clip_norm: 1.0
+  allowed_gradnorm_factor: 5
+  betas:
+  - 0.9
+  - 0.95
+  lr_scheduler: cosine
+  warmup_steps: 3000
+  hold_steps: 0
+  lr_scheduler_iter: 100001
+  cosine_min_range: 0.0
+  freeze_vggt: false
+
+model:
+  model_type: regressive
+  arch: 'EncDecVitB/8'
+  pretrained_vggt: true
+  attention_to_features_type: full_attention
+
+data:
+  subdataset_list:
+    - name: re10k
+      view_sampler_range:
+      - 25
+      - 192
+      expansion_factor: 0.1
+      equalization_length: 67000
+      normalization_mode: cameras
+  num_cond_views_aug:
+  - 2
+  - 2
+  aspect_ratio_range:
+  - 1.0
+  - 1.0
+  im_size_hw:
+  - 256
+  - 256
+  num_views: 10
+  zero_out_cam_cond_p: 0.0
+  num_tgt_views: 6
+  view_to_sample_prob:
+    - 2,1
+
+test_data:
+  dataset_names:
+  - re10k
+  dataset_names_log:
+  - re10k_posed
+  zero_out_cam_cond_p:
+  - 0.0
+  test_view_indices_paths:
+  - assets/re10k_2v.json
+  num_cond_views:
+  - 2
+  normalization_mode:
+  - cameras
+
+view_sampler:
+  train_method: bounded_interp
+  test_method: fixed
+
+log_dir: ./output
+
+eval:
+  vis_iter: 1000
+  log_iter: 50
+  eval_iter: 5000
+  ckpt_iter: 5000
+  measure_time: true
+  use_fixed_batch: false
