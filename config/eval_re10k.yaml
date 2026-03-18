@@ -1,0 +1,29 @@
+module: run_eval
+
+seed: 0
+
+eval_data:
+  dataset_name: re10k
+  dataset_name_log: re10k_2_view_posed
+  zero_out_cam_cond_p: 0.0
+  test_view_indices_path: ./assets/re10k_2v.json
+  num_cond_views: 2
+  video_path_type: bspline_interp_eased
+
+model:
+  arch: 'EncDecVitB/8'
+  attention_to_features_type: full_attention
+
+opt:
+  batch_size: 512
+
+data:
+  im_size_hw:
+  - 256
+  - 256
+  eval_video_length: 100
+
+# Checkpoint is auto-downloaded from HuggingFace on first run.
+checkpoint_path: hf://facebook/lagernvs_re10k_2v_256/model.pt
+
+log_dir: ./output

@@ -1,0 +1,31 @@
+module: run_eval
+
+seed: 0
+
+eval_data:
+  # Set to your target dataset: re10k, dl3dv, mipnerf360, co3d_eval, etc.
+  dataset_name: re10k  # TODO: set your dataset
+  dataset_name_log: re10k_eval  # TODO: set a descriptive name for output directory
+  zero_out_cam_cond_p: 0.0  # 0.0 = posed (cameras provided), 1.0 = unposed (cameras zeroed out)
+  # Path to test view indices JSON file.
+  test_view_indices_path: test_view_indices.json  # TODO: update with your local path
+  num_cond_views: 2  # TODO: set number of conditioning views
+  video_path_type: bspline_interp_eased  # options: bspline_interp_eased, linear_interp, loop_360, test_path
+
+model:
+  arch: 'EncDecVitB/8'
+  attention_to_features_type: bidirectional_cross_attention
+
+opt:
+  batch_size: 8  # reduce if running out of memory
+
+data:
+  im_size_hw:
+  - 512
+  - 512
+  eval_video_length: 100
+
+# Checkpoint is auto-downloaded from HuggingFace on first run.
+checkpoint_path: hf://facebook/lagernvs_general_512/model.pt
+
+log_dir: ./output
