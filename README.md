@@ -18,6 +18,11 @@
 LagerNVS is a feed-forward model for novel view synthesis (NVS). Given one or more input images of a scene, it synthesizes new views from a target cameras. It generalizes to in-the-wild data, renders new views in real time and can operate with or without known source camera poses.
 The model uses 3D biases without explicit 3D representations. The architecture features a large 3D-aware encoder (from VGGT pre-training) to extract scene tokens and a transformer-based renderer that conditions on these tokens via cross-attention to render novel views.
 
+## Announcements
+[27 Mar 2026] We are aware that the model produces unsatisfactory results when target camera intrinsics vary substantially from source camera intrinsics. We are working on a fix.
+
+[27 Mar 2026] We have technical issues with granting access to the model. It might take a couple of days after filing the request before you get the access, and we are actively working to reduce that time.
+
 ## Installation
 
 ```bash
