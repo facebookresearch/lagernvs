@@ -53,8 +53,8 @@ class FullAttentionBlock(nn.Module):
             drop=mlp_dropout,
         )
 
-    def forward(self, x, attn_bias):
-        x = x + self.attn(self.norm1(x), attn_bias=attn_bias)
+    def forward(self, x):
+        x = x + self.attn(self.norm1(x))
         x = x + self.mlp(self.norm2(x))
         return x
 
@@ -120,13 +120,13 @@ class CrossAttentionBlock(nn.Module):
 
         # self-attention
         y = self.norm1(x)
-        y = self.self_attn(y, attn_bias=None, kv=None)
+        y = self.self_attn(y, kv=None)
         x = x + y
 
         # cross-attention
         y = self.norm2(x)
         y_kv = self.norm2_kv(cond_tokens)
-        y = self.cross_attn(y, kv=y_kv, attn_bias=None)
+        y = self.cross_attn(y, kv=y_kv)
         x = x + y
 
         # feedforward
@@ -214,17 +214,15 @@ class BidirectionalCrossAttentionBlock(nn.Module):
         ), f"Unexpected number of dimensions, {x.ndim}, {cond_tokens.ndim}"
 
         # self-attention
-        x = x + self.self_attn(self.norm1_x(x), attn_bias=None, kv=None)
+        x = x + self.self_attn(self.norm1_x(x), kv=None)
 
         # cross-attention
         x_norm = self.norm2_x(x)
         rec_norm = self.norm1_rec(cond_tokens)
         # usual cross-attention
-        x = x + self.cross_attn_x(x_norm, kv=rec_norm, attn_bias=None)
+        x = x + self.cross_attn_x(x_norm, kv=rec_norm)
         # reverse cross-attention
-        cond_tokens = cond_tokens + self.cross_attn_rec(
-            rec_norm, kv=x_norm, attn_bias=None
-        )
+        cond_tokens = cond_tokens + self.cross_attn_rec(rec_norm, kv=x_norm)
 
         # feedforward
         x = x + self.mlp_x(self.norm3_x(x))

@@ -225,10 +225,9 @@ class FullAttentionRendererCore(nn.Module):
                 x = torch.utils.checkpoint.checkpoint(
                     self.renderer_blocks[renderer_block_idx],
                     x,
-                    attn_bias=None,
                     use_reentrant=False,
                 )
             else:
-                x = self.renderer_blocks[renderer_block_idx](x, attn_bias=None)
+                x = self.renderer_blocks[renderer_block_idx](x)
         x = x[:, num_rec_tokens:, :]
         return x

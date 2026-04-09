@@ -83,7 +83,7 @@ class Attention(nn.Module):
         # Get appropriate flash attention ops based on GPU
         self.flash_attn_ops = _get_flash_attention_ops()
 
-    def forward(self, q: torch.Tensor, attn_bias, kv=None) -> torch.Tensor:
+    def forward(self, q: torch.Tensor, kv=None) -> torch.Tensor:
         # attention block that supports non-query keys and values
         if kv is None:
             kv = q
@@ -98,30 +98,13 @@ class Attention(nn.Module):
         if self.use_qk_norm:
             q, k = self.q_norm(q), self.k_norm(k)
 
-        if attn_bias is not None:
-            attn_bias = einops.repeat(
-                attn_bias,
-                "b1 nh1 sq skv -> (b1 b) (nh1 nh) sq skv",
-                b=q.shape[0],
-                nh=self.num_heads,
-            )
-            # flash attention does not support custom attention mask
-            x = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attn_bias,
-                p=self.attn_dropout if self.training else 0.0,
-            )
-        else:
-            x = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attn_bias,
-                p=self.attn_dropout if self.training else 0.0,
-                op=self.flash_attn_ops,
-            )
+        x = xops.memory_efficient_attention(
+            q,
+            k,
+            v,
+            p=self.attn_dropout if self.training else 0.0,
+            op=self.flash_attn_ops,
+        )
 
         x = einops.rearrange(x, "b n h d -> b n (h d)")
 
