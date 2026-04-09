@@ -13,27 +13,26 @@ import xformers.ops as xops
 def _get_flash_attention_ops():
     """Automatically detect GPU and return appropriate flash attention ops.
 
-    Returns Flash Attention 3 ops for H100 (compute capability >= 9.0),
-    otherwise returns Flash Attention 2 ops.
+    Returns Flash Attention 3 ops for H100+ (compute capability >= 9.0),
+    otherwise returns None to let xformers auto-dispatch to the best
+    available backend (FA2, cutlass, etc.).
     """
     if not torch.cuda.is_available():
         return None
 
-    # Get compute capability of current device
     major, _ = torch.cuda.get_device_capability()
 
-    # H100 has compute capability 9.0
+    # Use Flash Attention 3 for H100 and newer (compute capability >= 9.0)
     if major >= 9:
-        # Use Flash Attention 3 for H100 and newer
         try:
             return (xops.fmha.flash3.FwOp, xops.fmha.flash3.BwOp)
         except AttributeError:
-            # Fall back to flash2 if flash3 not available
-            print("Flash Attention 3 not available, falling back to Flash Attention 2")
-            return (xops.fmha.flash.FwOp, xops.fmha.flash.BwOp)
-    else:
-        # Use Flash Attention 2 for older GPUs
-        return (xops.fmha.flash.FwOp, xops.fmha.flash.BwOp)
+            pass
+
+    # For all other GPUs, let xformers auto-dispatch to the best available
+    # backend. This handles platforms where FA2 is not built (e.g. Windows)
+    # by falling back to cutlass or other available operators.
+    return None
 
 
 # src: https://github.com/pytorch/benchmark/blob/main/torchbenchmark/models/llama/model.py#L28
