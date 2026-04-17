@@ -21,8 +21,6 @@ The model uses 3D biases without explicit 3D representations. The architecture f
 ## Announcements
 [27 Mar 2026] We are aware that the model produces unsatisfactory results when target camera intrinsics vary substantially from source camera intrinsics. We are working on a fix.
 
-[27 Mar 2026] We have technical issues with granting access to the model. It might take a couple of days after filing the request before you get the access, and we are actively working to reduce that time.
-
 ## Installation
 
 ```bash
