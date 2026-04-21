@@ -26,10 +26,9 @@ Usage:
   python minimal_inference.py --images path/to/img1.png path/to/img2.png
   python minimal_inference.py --images images/input_000000.png images/input_000001.png
 
-Available checkpoints (set via --model_repo and --attention_type):
-  General (512px):  facebook/lagernvs_general_512   attention=bidirectional_cross_attention
-  Re10k (256px):    facebook/lagernvs_re10k_2v_256  attention=full_attention
-  DL3DV (256px):    facebook/lagernvs_dl3dv_2-6_v_256 attention=bidirectional_cross_attention
+This script uses the general model (facebook/lagernvs_general_512) which supports
+inference without known source camera poses. For posed-only models (Re10k, DL3DV),
+use run_eval.py with ground truth camera poses instead.
 """
 
 import argparse
@@ -97,6 +96,13 @@ def main():
         ),
     )
     args = parser.parse_args()
+
+    assert args.model_repo == "facebook/lagernvs_general_512", (
+        f"Only the general model (facebook/lagernvs_general_512) is supported "
+        f"for inference without known camera poses. Got: {args.model_repo}. "
+        f"Posed-only models (Re10k, DL3DV) are intended only for benchmarking. "
+        f"Use them in run_eval.py with ground truth camera poses."
+    )
 
     # -------------------------------------------------------------------------
     # 1. Device and dtype setup

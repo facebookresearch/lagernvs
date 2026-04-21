@@ -64,30 +64,10 @@ python -c "from huggingface_hub import list_repo_files; print('\n'.join(list_rep
 
 ## Minimal Inference
 
-Run inference with the general model on your own images:
+Run inference with the general model on your own images without known source camera poses:
 
 ```bash
 python minimal_inference.py --images path/to/img1.png path/to/img2.png
-```
-
-To use a different checkpoint (see [Available Checkpoints](#available-checkpoints) below):
-
-```bash
-# Re10k model (256px, 2-view, posed)
-python minimal_inference.py \
-    --images path/to/img1.png path/to/img2.png \
-    --model_repo facebook/lagernvs_re10k_2v_256 \
-    --attention_type full_attention \
-    --target_size 256 \
-    --mode square_crop
-
-# DL3DV model (256px, 2-6 views, posed)
-python minimal_inference.py \
-    --images path/to/img1.png path/to/img2.png path/to/img3.png \
-    --model_repo facebook/lagernvs_dl3dv_2-6_v_256 \
-    --attention_type bidirectional_cross_attention \
-    --target_size 256 \
-    --mode square_crop
 ```
 
 Run `python minimal_inference.py --help` for all options (`--video_length`, `--output`, etc.).
@@ -98,7 +78,7 @@ See [`minimal_inference.py`](minimal_inference.py) for the fully commented sourc
 
 All models use the `EncDecVitB/8` architecture (VGGT encoder + 12-layer renderer, patch size 8). Three checkpoints are available on HuggingFace.
 We recommend using the **general** model for most use cases, as it is trained on a large dataset of scenes and can handle a wide range of input conditions.
-Re10k and DL3DV models are shared primarily for benchmarking and reproducitbility.
+Re10k and DL3DV models are shared primarily for benchmarking and reproducibility.
 
 | Checkpoint | HuggingFace Repo | Training Data | Resolution | Train Cond. Views | Camera Poses |
 |-----------|-----------------|---------------|------------|-------------|--------------|
