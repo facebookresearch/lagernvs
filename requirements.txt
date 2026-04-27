@@ -19,3 +19,5 @@ timm==1.0.25
 opencv-python>=4.13.0,<4.14.0
 tqdm
 pandas
+# Additional dependencies for interactive viewer (run_interactive.py)
+open3d>=0.17.0
