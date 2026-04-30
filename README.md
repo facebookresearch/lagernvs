@@ -78,16 +78,9 @@ See [`minimal_inference.py`](minimal_inference.py) for the fully commented sourc
 
 > **See [`run_interactive.py`](run_interactive.py) for full setup instructions, usage, and controls.**
 
-Real-time interactive novel-view rendering using Open3D. Poses are estimated automatically with VGGT — no camera calibration needed.
+Real-time interactive novel-view rendering using Open3D. Poses are estimated automatically with VGGT — no camera calibration needed. The model checkpoint is auto-downloaded from HuggingFace (requires authentication, see [Model Access](#model-access)).
 
-1. Download the general checkpoint and place it at `checkpoints/model.pt`:
-```bash
-mkdir -p checkpoints
-# Download model.pt from https://huggingface.co/facebook/lagernvs_general_512
-# and save to checkpoints/model.pt
-```
-
-2. Create a `test_data/` directory with scene folders (supports nested subfolders), each containing 2-10 images (.png/.jpg/.jpeg) of a static subject:
+1. Create a `test_data/` directory with scene folders (supports nested subfolders), each containing 2-10 images (.png/.jpg/.jpeg) of a static subject:
 ```
 test_data/
 ├── my_scene/
@@ -101,7 +94,7 @@ test_data/
         └── ...
 ```
 
-3. Run the viewer:
+2. Run the viewer:
 ```bash
 python run_interactive.py                        # all scenes in test_data/
 python run_interactive.py --scenes my_scene      # specific scene(s)
