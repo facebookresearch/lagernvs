@@ -10,8 +10,8 @@
 # then renders novel views in real-time with interaction via Open3D.
 #
 # Setup:
-#   - Download the model checkpoint from facebook/lagernvs_general_512 (see README)
-#     and place it at ./checkpoints/model.pt (or pass --checkpoint path)
+#   - Authenticate with HuggingFace (see README Model Access section)
+#     The checkpoint is auto-downloaded from facebook/lagernvs_general_512
 #   - Place scene data in ./test_data/ (supports nested subfolders)
 #   - Each leaf folder containing images is treated as a scene
 #   - Each scene folder should contain 2-10 input images (.png, .jpg, or .jpeg)
@@ -41,23 +41,36 @@ logging.getLogger("torch.utils.flop_counter").setLevel(logging.ERROR)
 logging.getLogger("xformers").setLevel(logging.ERROR)
 
 import einops, numpy as np, open3d as o3d, torch, torch.nn.functional as F
+from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 torch.backends.cudnn.benchmark = True
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Replace xformers attention with PyTorch native SDPA for broader GPU compatibility
-from models.layers.attention import Attention
+# Use PyTorch native SDPA when xformers is unavailable or non-functional on this GPU
+_use_sdpa = True
+try:
+    import xformers.ops as xops  # noqa: F401
+    if torch.cuda.is_available():
+        _q = torch.zeros(1, 1, 1, 64, device="cuda", dtype=torch.bfloat16)
+        xops.memory_efficient_attention(_q, _q, _q)
+        del _q
+        _use_sdpa = False
+except (ImportError, ValueError, RuntimeError):
+    pass
 
-def _sdpa_forward(self, q, kv=None):
-    if kv is None: kv = q
-    q, k, v = self.q_proj(q), self.k_proj(kv), self.v_proj(kv)
-    q, k, v = (einops.rearrange(t, "b l (nh dh) -> b nh l dh", dh=self.head_dim) for t in (q, k, v))
-    if self.use_qk_norm: q, k = self.q_norm(q), self.k_norm(k)
-    x = F.scaled_dot_product_attention(q, k, v, dropout_p=self.attn_dropout if self.training else 0.0)
-    return self.attn_fc_dropout(self.proj(einops.rearrange(x, "b nh l dh -> b l (nh dh)")))
+if _use_sdpa:
+    from models.layers.attention import Attention
 
-Attention.forward = _sdpa_forward
+    def _sdpa_forward(self, q, kv=None):
+        if kv is None: kv = q
+        q, k, v = self.q_proj(q), self.k_proj(kv), self.v_proj(kv)
+        q, k, v = (einops.rearrange(t, "b l (nh dh) -> b nh l dh", dh=self.head_dim) for t in (q, k, v))
+        if self.use_qk_norm: q, k = self.q_norm(q), self.k_norm(k)
+        x = F.scaled_dot_product_attention(q, k, v, dropout_p=self.attn_dropout if self.training else 0.0)
+        return self.attn_fc_dropout(self.proj(einops.rearrange(x, "b nh l dh -> b l (nh dh)")))
+
+    Attention.forward = _sdpa_forward
 
 from data.camera_utils import compute_plucker_rays, get_K_matrices
 from models.encoder_decoder import EncDec_VitB8
@@ -107,9 +120,10 @@ def normalize_scene(all_c2w, cond_indices):
     all_c2w_norm[:, :3, 3] /= scene_scale
     return all_c2w_norm, torch.max(torch.norm(all_c2w_norm[cond_indices, :3, 3], dim=-1)).item()
 
-def load_model(checkpoint_path, device="cuda"):
+def load_model(model_repo, device="cuda"):
     model = EncDec_VitB8(pretrained_vggt=False, attention_to_features_type="bidirectional_cross_attention")
-    model.load_state_dict(torch.load(checkpoint_path, map_location="cpu")["model"])
+    ckpt_path = hf_hub_download(model_repo, filename="model.pt")
+    model.load_state_dict(torch.load(ckpt_path, map_location="cpu")["model"])
     return model.to(device).eval()
 
 def load_vggt(device):
@@ -208,7 +222,7 @@ def main(args):
 
     print("Loading LagerNVS model...")
     t0 = time.time()
-    model = load_model(args.checkpoint, device=device)
+    model = load_model(args.model_repo, device=device)
     print(f"  LagerNVS loaded ({time.time()-t0:.1f}s)")
     print("Loading VGGT model...")
     t0 = time.time()
@@ -223,17 +237,23 @@ def main(args):
     for i, sc in enumerate(scenes):
         print(f"  [{key_labels[i]}] {sc['name']} (f={sc['K_np'][0,0]:.1f})")
 
-    K_np = np.array([[W, 0, W/2], [0, W, H/2], [0, 0, 1]], dtype=np.float64)
-    K_inv = torch.linalg.inv(torch.tensor(K_np, dtype=torch.float32)).to(device)
     y, x = torch.meshgrid(torch.arange(H, device=device, dtype=torch.float32), torch.arange(W, device=device, dtype=torch.float32), indexing="ij")
     uv_hom = torch.stack([x + 0.5, y + 0.5, torch.ones_like(x)], dim=-1)
-    cached_dirs = (K_inv @ uv_hom.reshape(-1, 3).T).T.reshape(H, W, 3)
-    cached_dirs = cached_dirs / cached_dirs.norm(dim=-1, keepdim=True)
-    cached_dirs_hom = torch.cat([cached_dirs, torch.ones(H, W, 1, device=device)], dim=-1).reshape(-1, 4)
+
+    def compute_view_cache(K_np_scene):
+        K_np_f64 = K_np_scene.astype(np.float64)
+        K_inv = torch.linalg.inv(torch.tensor(K_np_f64, dtype=torch.float32)).to(device)
+        cached_dirs = (K_inv @ uv_hom.reshape(-1, 3).T).T.reshape(H, W, 3)
+        cached_dirs = cached_dirs / cached_dirs.norm(dim=-1, keepdim=True)
+        cached_dirs_hom = torch.cat([cached_dirs, torch.ones(H, W, 1, device=device)], dim=-1).reshape(-1, 4)
+        return K_np_f64, K_inv, cached_dirs_hom
+
+    K_np, K_inv, cached_dirs_hom = compute_view_cache(scenes[0]["K_np"])
     init_w2c_np = np.eye(4, dtype=np.float64)
     win_h, win_w = int(H * args.view_scale), int(W * args.view_scale)
 
     active_scene = 0
+    prev_scene_idx = 0
     sc = scenes[0]
     init_im = render_single_view(model, sc["rec_tokens"], make_plucker_rays(init_w2c_np, sc["K_np"], res, device), dtype)
     init_pts = depth2pts(torch.ones(H, W, device=device), torch.eye(4, device=device, dtype=torch.float32), K_inv)
@@ -248,6 +268,9 @@ def main(args):
         if action == 1: active_scene, reset_view = idx, True
     for i in range(len(scenes)):
         vis.register_key_action_callback(SCENE_KEYS[i], lambda v, a, m, idx=i: set_scene(v, a, m, idx))
+    # Suppress default Open3D behavior for keys we use as scene selectors
+    for key in [ord('p'), ord('o'), ord('r'), ord('P'), ord('O'), ord('R')]:
+        vis.register_key_callback(key, lambda vis: False)
     def on_key(vis, action, mods, key):
         if action != 0: key_state[key] = True
     for k in [ord('W'), ord('S'), ord('A'), ord('D')]:
@@ -277,6 +300,9 @@ def main(args):
     while True:
         s_idx = active_scene
         sc = scenes[s_idx]
+        if s_idx != prev_scene_idx:
+            K_np, K_inv, cached_dirs_hom = compute_view_cache(sc["K_np"])
+            prev_scene_idx = s_idx
         if reset_view:
             set_camera_params(view_control, init_w2c_np)
             reset_view = False
@@ -298,8 +324,10 @@ def main(args):
             key_state.clear()
         current_c2w = w2c_to_c2w(torch.tensor(current_w2c, dtype=torch.float32, device=device))
 
+        rays = make_plucker_rays(current_w2c, sc["K_np"], res, device)
+        torch.cuda.synchronize()
         t_frame = time.time()
-        im = render_single_view(model, sc["rec_tokens"], make_plucker_rays(current_w2c, sc["K_np"], res, device), dtype)
+        im = render_single_view(model, sc["rec_tokens"], rays, dtype)
         torch.cuda.synchronize()
         frame_time += max(time.time() - t_frame, 1e-7)
         frame_count += 1
@@ -322,5 +350,5 @@ if __name__ == "__main__":
     p.add_argument("--scenes", nargs="*", default=None)
     p.add_argument("--view_scale", type=int, default=4)
     p.add_argument("--square", action="store_true", help="Use 512x512 square instead of 288x512 widescreen")
-    p.add_argument("--checkpoint", default=os.path.join(SCRIPT_DIR, "checkpoints", "model.pt"))
+    p.add_argument("--model_repo", default="facebook/lagernvs_general_512", help="HuggingFace repo ID for the checkpoint")
     main(p.parse_args())
