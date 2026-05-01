@@ -194,7 +194,10 @@ def prepare_scene(scene_name, scene_dir, model, vggt_model, device, dtype, res):
     t0 = time.time()
     rec_tokens = precompute_encoder(model, images, build_posed_tokens(c2w_norm, fxfycxcy, cond_indices, camera_scale, res), device, dtype)
     print(f"  LagerNVS Encoded ({time.time()-t0:.2f}s)")
-    return {"name": scene_name, "K_np": K.numpy(), "rec_tokens": rec_tokens}
+    up_vectors = -c2w_norm[cond_indices, :3, 1]
+    up_avg = up_vectors.mean(dim=0)
+    up_avg = (up_avg / up_avg.norm()).tolist()
+    return {"name": scene_name, "K_np": K.numpy(), "rec_tokens": rec_tokens, "up_vector": up_avg}
 
 def find_scene_dirs(root):
     scenes = []

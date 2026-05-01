@@ -19,6 +19,10 @@ LagerNVS is a feed-forward model for novel view synthesis (NVS). Given one or mo
 The model uses 3D biases without explicit 3D representations. The architecture features a large 3D-aware encoder (from VGGT pre-training) to extract scene tokens and a transformer-based renderer that conditions on these tokens via cross-attention to render novel views.
 
 ## Announcements
+[1 May 2026] We have included a server version of the interactive viewer that can be run on a remote GPU node and streamed to the browser on a local machine. See [Browser Viewer](#browser-viewer-headless-remote-gpu) for details.
+
+[30 Apr 2026] Jonathon Luiten has contributed a minimal interactive viewer that allows you to explore the model without known camera poses. See [Interactive Viewer](#interactive-viewer) for details.
+
 [27 Mar 2026] We are aware that the model produces unsatisfactory results when target camera intrinsics vary substantially from source camera intrinsics. We are working on a fix.
 
 ## Installation
@@ -104,6 +108,28 @@ python run_interactive.py --view_scale 2         # smaller window
 Controls: `1`-`0` to switch scenes, `W`/`S` to move forward/back, `A`/`D` to rotate, mouse drag to rotate, scroll to zoom, Ctrl+drag to pan, Esc to quit.
 
 *Contributed by [Jonathon Luiten](https://x.com/JonathonLuiten).*
+
+### Browser Viewer (headless / remote GPU)
+
+> **See [`run_interactive_server.py`](run_interactive_server.py) for full setup instructions, usage, and controls.**
+
+If you don't have a display server (e.g., running on a remote GPU node), use the browser-based viewer instead. It uses the same scene preparation and rendering as `run_interactive.py` but streams frames over WebSocket to a browser client.
+
+1. **On the GPU server:**
+```bash
+python run_interactive_server.py                        # all scenes in test_data/
+python run_interactive_server.py --scenes my_scene      # specific scene(s)
+```
+
+2. **On your local machine**, set up an SSH tunnel and open the viewer:
+```bash
+ssh -L 8765:localhost:8765 <gpu-server>
+# Then open http://localhost:8765 in your browser
+```
+
+Controls: mouse drag to rotate, arrow keys to look, `W`/`A`/`S`/`D` to move, `Q`/`E` for up/down, `[`/`]` to adjust speed, `Shift` for fast movement, `R` to reset view, number keys to switch scenes.
+
+The status bar shows both the viewer FPS (limited by network round-trip) and the GPU render FPS, so you can tell whether the bottleneck is the model or the connection.
 
 ## Available Checkpoints
 

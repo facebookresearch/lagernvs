@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LagerNVS Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; color: #eee; font-family: monospace; overflow: hidden; }
+  #container { display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; }
+  canvas { cursor: grab; image-rendering: pixelated; }
+  canvas:active { cursor: grabbing; }
+  #hud { position: fixed; top: 10px; left: 10px; font-size: 13px; line-height: 1.6; opacity: 0.8; }
+  #scenes { position: fixed; top: 10px; right: 10px; font-size: 13px; line-height: 1.6; opacity: 0.8; text-align: right; }
+  #status { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: 0.6; }
+  .active-scene { color: #4f4; font-weight: bold; }
+
+  /* Control overlays */
+  .controls-group {
+    position: fixed;
+    bottom: 24px;
+    display: grid;
+    gap: 4px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #controls-move {
+    left: 24px;
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(2, 48px);
+  }
+  #controls-look {
+    right: 24px;
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(2, 48px);
+  }
+  .controls-label {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.4;
+  }
+  .ctrl-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    background: rgba(80, 80, 80, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.08s, opacity 0.08s;
+    cursor: pointer;
+  }
+  .ctrl-btn svg {
+    width: 24px;
+    height: 24px;
+    fill: rgba(255, 255, 255, 0.9);
+    transition: fill 0.08s;
+  }
+  .ctrl-btn.active {
+    background: rgba(255, 255, 255, 0.95);
+  }
+  .ctrl-btn.active svg {
+    fill: #111;
+  }
+  .ctrl-btn-label {
+    position: absolute;
+    bottom: 3px;
+    right: 5px;
+    font-size: 10px;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .ctrl-btn { position: relative; }
+
+  #speed-indicator {
+    position: fixed;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #speed-indicator.visible { opacity: 0.6; }
+</style>
+</head>
+<body>
+<div id="container">
+  <canvas id="view"></canvas>
+</div>
+<div id="hud">
+  Drag: rotate | Arrows: look<br>
+  WASD: move | Q/E: up/down<br>
+  [ / ]: speed | Shift: fast | R: reset<br>
+  Number keys: switch scene
+</div>
+<div id="scenes"></div>
+<div id="status">Connecting...</div>
+<div id="speed-indicator"></div>
+
+<!-- Movement controls (bottom-left) -->
+<div id="controls-move" class="controls-group">
+  <span class="controls-label">Move</span>
+  <!-- Row 1: Q(up), W(fwd), E(down) -->
+  <div class="ctrl-btn" data-key="q" id="btn-q">
+    <svg viewBox="0 0 24 24"><polygon points="12,4 4,20 20,20"/></svg>
+    <span class="ctrl-btn-label">Q</span>
+  </div>
+  <div class="ctrl-btn" data-key="w" id="btn-w">
+    <svg viewBox="0 0 24 24"><polygon points="12,4 4,20 20,20"/></svg>
+    <span class="ctrl-btn-label">W</span>
+  </div>
+  <div class="ctrl-btn" data-key="e" id="btn-e">
+    <svg viewBox="0 0 24 24"><polygon points="12,20 4,4 20,4"/></svg>
+    <span class="ctrl-btn-label">E</span>
+  </div>
+  <!-- Row 2: A(left), S(back), D(right) -->
+  <div class="ctrl-btn" data-key="a" id="btn-a">
+    <svg viewBox="0 0 24 24"><polygon points="4,12 20,4 20,20"/></svg>
+    <span class="ctrl-btn-label">A</span>
+  </div>
+  <div class="ctrl-btn" data-key="s" id="btn-s">
+    <svg viewBox="0 0 24 24"><polygon points="12,20 4,4 20,4"/></svg>
+    <span class="ctrl-btn-label">S</span>
+  </div>
+  <div class="ctrl-btn" data-key="d" id="btn-d">
+    <svg viewBox="0 0 24 24"><polygon points="20,12 4,4 4,20"/></svg>
+    <span class="ctrl-btn-label">D</span>
+  </div>
+</div>
+
+<!-- Look controls (bottom-right) -->
+<div id="controls-look" class="controls-group">
+  <span class="controls-label">Look</span>
+  <!-- Row 1: empty, up, empty -->
+  <div></div>
+  <div class="ctrl-btn" data-key="ArrowUp" id="btn-up">
+    <svg viewBox="0 0 24 24"><polygon points="12,4 4,20 20,20"/></svg>
+    <span class="ctrl-btn-label">&uarr;</span>
+  </div>
+  <div></div>
+  <!-- Row 2: left, down, right -->
+  <div class="ctrl-btn" data-key="ArrowLeft" id="btn-left">
+    <svg viewBox="0 0 24 24"><polygon points="4,12 20,4 20,20"/></svg>
+    <span class="ctrl-btn-label">&larr;</span>
+  </div>
+  <div class="ctrl-btn" data-key="ArrowDown" id="btn-down">
+    <svg viewBox="0 0 24 24"><polygon points="12,20 4,4 20,4"/></svg>
+    <span class="ctrl-btn-label">&darr;</span>
+  </div>
+  <div class="ctrl-btn" data-key="ArrowRight" id="btn-right">
+    <svg viewBox="0 0 24 24"><polygon points="20,12 4,4 4,20"/></svg>
+    <span class="ctrl-btn-label">&rarr;</span>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('view');
+const ctx = canvas.getContext('2d');
+const status = document.getElementById('status');
+const scenesDiv = document.getElementById('scenes');
+
+const WS_URL = 'ws://localhost:8765';
+let moveSpeed = 0.04;
+const ROT_SPEED = 0.006;
+const ARROW_ROT_SPEED = 0.06;
+const SCROLL_SPEED = 0.15;
+const DISPLAY_SCALE = 1;
+const SPEED_STEP = 1.3;
+const SHIFT_MULT = 3;
+let speedFadeTimer = null;
+
+let ws = null;
+let width = 512, height = 288;
+let scenes = [];
+let sceneUpVectors = [];
+let activeScene = 0;
+let waiting = false;
+let frameCount = 0;
+let lastFpsTime = performance.now();
+let fps = 0;
+let renderFps = 0;
+
+// Scene up vector (updated per scene from server)
+let sceneUp = [0, -1, 0];
+const MAX_PITCH = Math.PI * 85 / 180;
+
+// Camera state
+let camPos = [0, 0, 0];
+let camYaw = 0;
+let camPitch = 0;
+
+// Input state
+const keys = {};
+let isDragging = false;
+let lastMouse = [0, 0];
+
+// Vector math helpers
+function v3dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function v3cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function v3scale(v, s) { return [v[0]*s, v[1]*s, v[2]*s]; }
+function v3sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function v3add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function v3neg(v) { return [-v[0], -v[1], -v[2]]; }
+function v3len(v) { return Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]); }
+function v3norm(v) { const l = v3len(v); return l > 1e-8 ? [v[0]/l, v[1]/l, v[2]/l] : [0,0,1]; }
+
+function rotateAroundAxis(v, axis, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const d = v3dot(v, axis);
+  const cr = v3cross(axis, v);
+  return [
+    v[0]*c + cr[0]*s + axis[0]*d*(1-c),
+    v[1]*c + cr[1]*s + axis[1]*d*(1-c),
+    v[2]*c + cr[2]*s + axis[2]*d*(1-c)
+  ];
+}
+
+function buildRotation(up, yaw, pitch) {
+  // Initial forward: +Z projected onto plane perpendicular to up
+  let fwd0 = v3sub([0,0,1], v3scale(up, v3dot([0,0,1], up)));
+  if (v3len(fwd0) < 1e-6) fwd0 = v3sub([1,0,0], v3scale(up, v3dot([1,0,0], up)));
+  fwd0 = v3norm(fwd0);
+
+  // Initial right: down × forward (OpenCV: right-handed with Y-down)
+  let right0 = v3norm(v3cross(v3neg(up), fwd0));
+
+  // Yaw: rotate forward and right around up
+  let fwd = rotateAroundAxis(fwd0, up, yaw);
+  let right = rotateAroundAxis(right0, up, yaw);
+
+  // Pitch: rotate forward around right (negative so positive pitch = look down)
+  let fwdFinal = rotateAroundAxis(fwd, right, -pitch);
+
+  // Down = forward × right (OpenCV convention)
+  let down = v3cross(fwdFinal, right);
+
+  // W2C rotation rows: right, down, forward
+  return [
+    right[0], right[1], right[2],
+    down[0], down[1], down[2],
+    fwdFinal[0], fwdFinal[1], fwdFinal[2]
+  ];
+}
+
+function getW2C() {
+  const R = buildRotation(sceneUp, camYaw, camPitch);
+  const tx = -(R[0]*camPos[0] + R[1]*camPos[1] + R[2]*camPos[2]);
+  const ty = -(R[3]*camPos[0] + R[4]*camPos[1] + R[5]*camPos[2]);
+  const tz = -(R[6]*camPos[0] + R[7]*camPos[1] + R[8]*camPos[2]);
+  return [
+    R[0], R[1], R[2], tx,
+    R[3], R[4], R[5], ty,
+    R[6], R[7], R[8], tz,
+    0,    0,    0,    1
+  ];
+}
+
+function resetCamera() {
+  camPos = [0, 0, 0];
+  camYaw = 0;
+  // Initial pitch that recovers the source camera's forward direction (0,0,1)
+  // given the scene's up vector. This corrects for the tilt between the
+  // up vector and the camera's Y axis while keeping the same look direction.
+  camPitch = -Math.asin(Math.max(-1, Math.min(1, sceneUp[2])));
+}
+
+function updateInputs() {
+  const R = buildRotation(sceneUp, camYaw, camPitch);
+  const fwd = [R[6], R[7], R[8]];
+  const right = [R[0], R[1], R[2]];
+  const speed = keys['Shift'] ? moveSpeed * SHIFT_MULT : moveSpeed;
+
+  if (keys['w'] || keys['W']) {
+    camPos[0] += fwd[0] * speed;
+    camPos[1] += fwd[1] * speed;
+    camPos[2] += fwd[2] * speed;
+  }
+  if (keys['s'] || keys['S']) {
+    camPos[0] -= fwd[0] * speed;
+    camPos[1] -= fwd[1] * speed;
+    camPos[2] -= fwd[2] * speed;
+  }
+  if (keys['a'] || keys['A']) {
+    camPos[0] -= right[0] * speed;
+    camPos[1] -= right[1] * speed;
+    camPos[2] -= right[2] * speed;
+  }
+  if (keys['d'] || keys['D']) {
+    camPos[0] += right[0] * speed;
+    camPos[1] += right[1] * speed;
+    camPos[2] += right[2] * speed;
+  }
+  if (keys['q'] || keys['Q']) {
+    camPos[0] += sceneUp[0] * speed;
+    camPos[1] += sceneUp[1] * speed;
+    camPos[2] += sceneUp[2] * speed;
+  }
+  if (keys['e'] || keys['E']) {
+    camPos[0] -= sceneUp[0] * speed;
+    camPos[1] -= sceneUp[1] * speed;
+    camPos[2] -= sceneUp[2] * speed;
+  }
+  if (keys['ArrowLeft']) camYaw += ARROW_ROT_SPEED;
+  if (keys['ArrowRight']) camYaw -= ARROW_ROT_SPEED;
+  if (keys['ArrowUp']) {
+    camPitch -= ARROW_ROT_SPEED;
+    camPitch = Math.max(-MAX_PITCH, camPitch);
+  }
+  if (keys['ArrowDown']) {
+    camPitch += ARROW_ROT_SPEED;
+    camPitch = Math.min(MAX_PITCH, camPitch);
+  }
+}
+
+function showSpeed() {
+  const el = document.getElementById('speed-indicator');
+  el.textContent = `Speed: ${moveSpeed.toFixed(3)}`;
+  el.classList.add('visible');
+  clearTimeout(speedFadeTimer);
+  speedFadeTimer = setTimeout(() => el.classList.remove('visible'), 1200);
+}
+
+function updateButtonStates() {
+  document.querySelectorAll('.ctrl-btn[data-key]').forEach(btn => {
+    const key = btn.dataset.key;
+    const pressed = keys[key] || keys[key.toUpperCase()];
+    btn.classList.toggle('active', !!pressed);
+  });
+}
+
+function requestFrame() {
+  if (!ws || ws.readyState !== WebSocket.OPEN || waiting) return;
+  updateInputs();
+  const w2c = getW2C();
+  ws.send(JSON.stringify({ type: 'render', w2c: w2c }));
+  waiting = true;
+}
+
+function updateSceneList() {
+  scenesDiv.innerHTML = scenes.map((name, i) =>
+    `<div class="${i === activeScene ? 'active-scene' : ''}">[${i + 1}] ${name}</div>`
+  ).join('');
+}
+
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.binaryType = 'blob';
+
+  ws.onopen = () => {
+    status.textContent = 'Connected, waiting for init...';
+  };
+
+  ws.onmessage = async (event) => {
+    if (typeof event.data === 'string') {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'init') {
+        scenes = msg.scenes;
+        sceneUpVectors = msg.up_vectors || scenes.map(() => [0, -1, 0]);
+        sceneUp = sceneUpVectors[0] || [0, -1, 0];
+        resetCamera();
+        width = msg.width;
+        height = msg.height;
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.width = (width * DISPLAY_SCALE) + 'px';
+        canvas.style.height = (height * DISPLAY_SCALE) + 'px';
+        updateSceneList();
+        status.textContent = 'Ready';
+        requestFrame();
+      } else if (msg.type === 'scene_ack') {
+        activeScene = msg.index;
+        sceneUp = sceneUpVectors[activeScene] || [0, -1, 0];
+        updateSceneList();
+      }
+      return;
+    }
+
+    // Binary data = header + JPEG frame
+    const arrayBuf = await event.data.arrayBuffer();
+    const view = new DataView(arrayBuf);
+    const headerLen = view.getUint16(0);
+    const headerJson = new TextDecoder().decode(arrayBuf.slice(2, 2 + headerLen));
+    const meta = JSON.parse(headerJson);
+    renderFps = meta.render_fps;
+    const jpegBlob = new Blob([arrayBuf.slice(2 + headerLen)], { type: 'image/jpeg' });
+
+    const img = new window.Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(img.src);
+      waiting = false;
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime > 1000) {
+        fps = frameCount / ((now - lastFpsTime) / 1000);
+        frameCount = 0;
+        lastFpsTime = now;
+        status.textContent = `${fps.toFixed(1)} fps | ${renderFps} render-fps | ${scenes[activeScene] || ''}`;
+      }
+      requestFrame();
+    };
+    img.src = URL.createObjectURL(jpegBlob);
+  };
+
+  ws.onclose = () => {
+    status.textContent = 'Disconnected. Reconnecting...';
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => {
+    status.textContent = 'Connection error';
+  };
+}
+
+// Input handlers
+document.addEventListener('keydown', (e) => {
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+  keys[e.key] = true;
+  updateButtonStates();
+
+  if (e.key === 'r' || e.key === 'R') {
+    resetCamera();
+    return;
+  }
+  if (e.key === '[') {
+    moveSpeed /= SPEED_STEP;
+    showSpeed();
+    return;
+  }
+  if (e.key === ']') {
+    moveSpeed *= SPEED_STEP;
+    showSpeed();
+    return;
+  }
+  const num = parseInt(e.key);
+  if (!isNaN(num) && num >= 1 && num <= scenes.length) {
+    const idx = num - 1;
+    sceneUp = sceneUpVectors[idx] || [0, -1, 0];
+    resetCamera();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'scene', index: idx }));
+    }
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  keys[e.key] = false;
+  updateButtonStates();
+});
+
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  lastMouse = [e.clientX, e.clientY];
+});
+
+document.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastMouse[0];
+  const dy = e.clientY - lastMouse[1];
+  lastMouse = [e.clientX, e.clientY];
+  camYaw += dx * ROT_SPEED;
+  camPitch += dy * ROT_SPEED;
+  camPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, camPitch));
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const R = buildRotation(sceneUp, camYaw, camPitch);
+  const fwd = [R[6], R[7], R[8]];
+  const d = e.deltaY > 0 ? -SCROLL_SPEED : SCROLL_SPEED;
+  camPos[0] += fwd[0] * d;
+  camPos[1] += fwd[1] * d;
+  camPos[2] += fwd[2] * d;
+}, { passive: false });
+
+// On-screen button interaction (mouse + touch)
+document.querySelectorAll('.ctrl-btn[data-key]').forEach(btn => {
+  const key = btn.dataset.key;
+  const press = (e) => { e.preventDefault(); keys[key] = true; updateButtonStates(); };
+  const release = (e) => { e.preventDefault(); keys[key] = false; updateButtonStates(); };
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+  btn.addEventListener('touchstart', press, { passive: false });
+  btn.addEventListener('touchend', release);
+  btn.addEventListener('touchcancel', release);
+});
+
+connect();
+</script>
+</body>
+</html>
