@@ -74,6 +74,37 @@ Run `python minimal_inference.py --help` for all options (`--video_length`, `--o
 
 See [`minimal_inference.py`](minimal_inference.py) for the fully commented source of truth. For interactive step-by-step exploration with visualization of intermediate results (loaded images, camera trajectories, sampled output frames), see the [`inference.ipynb`](inference.ipynb) notebook.
 
+## Interactive Viewer
+
+> **See [`run_interactive.py`](run_interactive.py) for full setup instructions, usage, and controls.**
+
+Real-time interactive novel-view rendering using Open3D. Poses are estimated automatically with VGGT — no camera calibration needed. The model checkpoint is auto-downloaded from HuggingFace (requires authentication, see [Model Access](#model-access)).
+
+1. Create a `test_data/` directory with scene folders (supports nested subfolders), each containing 2-10 images (.png/.jpg/.jpeg) of a static subject:
+```
+test_data/
+├── my_scene/
+│   ├── 00.jpg
+│   ├── 01.jpg
+│   └── ...
+└── dataset_name/
+    ├── scene_a/
+    │   └── ...
+    └── scene_b/
+        └── ...
+```
+
+2. Run the viewer:
+```bash
+python run_interactive.py                        # all scenes in test_data/
+python run_interactive.py --scenes my_scene      # specific scene(s)
+python run_interactive.py --view_scale 2         # smaller window
+```
+
+Controls: `1`-`0` to switch scenes, `W`/`S` to move forward/back, `A`/`D` to rotate, mouse drag to rotate, scroll to zoom, Ctrl+drag to pan, Esc to quit.
+
+*Contributed by [Jonathon Luiten](https://x.com/JonathonLuiten).*
+
 ## Available Checkpoints
 
 All models use the `EncDecVitB/8` architecture (VGGT encoder + 12-layer renderer, patch size 8). Three checkpoints are available on HuggingFace.
