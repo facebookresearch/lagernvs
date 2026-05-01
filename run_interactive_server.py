@@ -46,12 +46,19 @@
 #   - See run_interactive.py and README.md for additional model limitations.
 
 import asyncio
+import concurrent.futures
 import io
 import json
 import logging
 import os
 import time
 import warnings
+
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass
 
 import numpy as np
 import websockets
@@ -82,9 +89,49 @@ from run_interactive import (
     setup_device,
 )
 
+class FastPluckerRays:
+    """Pre-computes static ray geometry on GPU; per-frame cost is just a matmul."""
+
+    def __init__(self, K_np, res, device):
+        H, W = res
+        K = torch.tensor(K_np, dtype=torch.float32, device=device)
+        K_inv = torch.linalg.inv(K)
+
+        px = torch.linspace(0.5, W - 0.5, W, device=device)
+        py = torch.linspace(0.5, H - 0.5, H, device=device)
+        grid_y, grid_x = torch.meshgrid(py, px, indexing="ij")
+        uv_hom = torch.stack([grid_x, grid_y, torch.ones_like(grid_x)], dim=-1)
+
+        dirs_local = (K_inv @ uv_hom.reshape(-1, 3).T).T
+        dirs_local = dirs_local / dirs_local.norm(dim=-1, keepdim=True)
+        self._dirs_local = dirs_local  # [H*W, 3]
+        self._H = H
+        self._W = W
+        self._device = device
+
+    def __call__(self, w2c_np):
+        w2c = torch.tensor(w2c_np, dtype=torch.float32, device=self._device)
+        R_w2c = w2c[:3, :3]
+        t_w2c = w2c[:3, 3]
+        R_c2w = R_w2c.T
+        cam_pos = -R_c2w @ t_w2c  # [3]
+
+        dirs_global = (R_c2w @ self._dirs_local.T).T  # [H*W, 3]
+        dirs = dirs_global.view(self._H, self._W, 3)
+        origin = cam_pos[None, None, :].expand_as(dirs)
+        moment = torch.cross(origin, dirs, dim=-1)
+        plucker = torch.cat([moment, dirs], dim=-1)  # [H, W, 6]
+        return plucker.permute(2, 0, 1).unsqueeze(0).unsqueeze(0)
+
 
 def frame_to_jpeg(frame_tensor, quality=85):
     img_np = frame_tensor.clamp(0, 1).permute(1, 2, 0).mul(255).byte().cpu().numpy()
+    buf = io.BytesIO()
+    Image.fromarray(img_np).save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def _encode_jpeg_np(img_np, quality):
     buf = io.BytesIO()
     Image.fromarray(img_np).save(buf, format="JPEG", quality=quality)
     return buf.getvalue()
@@ -134,9 +181,11 @@ def main(args):
     torch.cuda.empty_cache()
 
     scene_names = [sc["name"] for sc in scenes]
+    fast_rays = [FastPluckerRays(sc["K_np"], res, device) for sc in scenes]
     print(f"\nScenes ready: {scene_names}")
 
     active_scene_idx = 0
+    jpeg_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
     async def handle_client(websocket):
         nonlocal active_scene_idx
@@ -154,55 +203,90 @@ def main(args):
         )
         print("Client connected")
 
-        frame_count = 0
-        frame_time = 0.0
-        logged_dtypes = False
+        latest_w2c = np.eye(4, dtype=np.float64)
+        pose_updated = asyncio.Event()
+        client_alive = True
 
-        async for message in websocket:
-            msg = json.loads(message)
+        async def reader():
+            nonlocal active_scene_idx, client_alive
+            try:
+                async for message in websocket:
+                    msg = json.loads(message)
+                    if msg["type"] == "pose":
+                        latest_w2c[:] = np.array(
+                            msg["w2c"], dtype=np.float64
+                        ).reshape(4, 4)
+                        pose_updated.set()
+                    elif msg["type"] == "scene":
+                        idx = msg["index"]
+                        if 0 <= idx < len(scenes):
+                            active_scene_idx = idx
+                            await websocket.send(
+                                json.dumps({"type": "scene_ack", "index": idx})
+                            )
+            except websockets.ConnectionClosed:
+                pass
+            finally:
+                client_alive = False
+                pose_updated.set()
 
-            if msg["type"] == "scene":
-                idx = msg["index"]
-                if 0 <= idx < len(scenes):
-                    active_scene_idx = idx
-                    await websocket.send(
-                        json.dumps({"type": "scene_ack", "index": idx})
-                    )
-                continue
+        async def render_loop():
+            loop = asyncio.get_event_loop()
+            frame_count = 0
+            frame_time = 0.0
+            pending_jpeg = None
+            pending_header = None
 
-            if msg["type"] == "render":
-                w2c = np.array(msg["w2c"], dtype=np.float64).reshape(4, 4)
-                sc = scenes[active_scene_idx]
+            await pose_updated.wait()
 
-                rays = make_plucker_rays(w2c, sc["K_np"], res, device)
-                torch.cuda.synchronize()
+            while client_alive:
+                pose_updated.clear()
+                w2c = latest_w2c.copy()
+                idx = active_scene_idx
+                sc = scenes[idx]
+
                 t0 = time.time()
+                rays = fast_rays[idx](w2c)
                 frame = render_single_view(model, sc["rec_tokens"], rays, dtype)
-                torch.cuda.synchronize()
+                img_np = (
+                    frame.clamp(0, 1).permute(1, 2, 0).mul(255).byte().cpu().numpy()
+                )
                 render_time = time.time() - t0
+                render_fps = 1.0 / max(render_time, 1e-7)
 
-                if not logged_dtypes:
-                    print(f"  rec_tokens dtype: {sc['rec_tokens'].dtype}")
-                    print(f"  rays dtype: {rays.dtype}")
-                    print(f"  output frame dtype: {frame.dtype}")
-                    logged_dtypes = True
+                if pending_jpeg is not None:
+                    jpeg_bytes = await pending_jpeg
+                    try:
+                        await websocket.send(pending_header + jpeg_bytes)
+                    except websockets.ConnectionClosed:
+                        break
 
-                jpeg_bytes = frame_to_jpeg(frame, quality=args.jpeg_quality)
+                pending_jpeg = loop.run_in_executor(
+                    jpeg_executor, _encode_jpeg_np, img_np, args.jpeg_quality
+                )
+                header = json.dumps({"render_fps": round(render_fps, 1)}).encode()
+                pending_header = len(header).to_bytes(2, "big") + header
 
                 frame_time += render_time
                 frame_count += 1
                 if frame_count % 30 == 0:
                     fps = 30 / frame_time
-                    print(
-                        f"  [{sc['name']}] {fps:.1f} render-fps, "
-                        f"{len(jpeg_bytes)/1024:.0f}KB/frame"
-                    )
+                    print(f"  [{sc['name']}] {fps:.1f} render-fps")
                     frame_time = 0.0
 
-                render_fps = 1.0 / max(render_time, 1e-7)
-                header = json.dumps({"render_fps": round(render_fps, 1)}).encode()
-                length_prefix = len(header).to_bytes(2, "big")
-                await websocket.send(length_prefix + header + jpeg_bytes)
+                if not pose_updated.is_set():
+                    await pose_updated.wait()
+
+            if pending_jpeg is not None:
+                jpeg_bytes = await pending_jpeg
+                try:
+                    await websocket.send(pending_header + jpeg_bytes)
+                except websockets.ConnectionClosed:
+                    pass
+
+        reader_task = asyncio.create_task(reader())
+        render_task = asyncio.create_task(render_loop())
+        await asyncio.gather(reader_task, render_task)
 
     html_path = os.path.join(SCRIPT_DIR, "interactive_viewer.html")
     with open(html_path, "r") as f:

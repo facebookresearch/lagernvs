@@ -181,7 +181,6 @@ let width = 512, height = 288;
 let scenes = [];
 let sceneUpVectors = [];
 let activeScene = 0;
-let waiting = false;
 let frameCount = 0;
 let lastFpsTime = performance.now();
 let fps = 0;
@@ -335,12 +334,22 @@ function updateButtonStates() {
   });
 }
 
-function requestFrame() {
-  if (!ws || ws.readyState !== WebSocket.OPEN || waiting) return;
+function sendPose() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   updateInputs();
   const w2c = getW2C();
-  ws.send(JSON.stringify({ type: 'render', w2c: w2c }));
-  waiting = true;
+  ws.send(JSON.stringify({ type: 'pose', w2c: w2c }));
+}
+
+let poseInterval = null;
+function startPoseLoop() {
+  if (poseInterval) return;
+  sendPose();
+  poseInterval = setInterval(sendPose, 16);
+}
+
+function stopPoseLoop() {
+  if (poseInterval) { clearInterval(poseInterval); poseInterval = null; }
 }
 
 function updateSceneList() {
@@ -373,7 +382,7 @@ function connect() {
         canvas.style.height = (height * DISPLAY_SCALE) + 'px';
         updateSceneList();
         status.textContent = 'Ready';
-        requestFrame();
+        startPoseLoop();
       } else if (msg.type === 'scene_ack') {
         activeScene = msg.index;
         sceneUp = sceneUpVectors[activeScene] || [0, -1, 0];
@@ -395,7 +404,6 @@ function connect() {
     img.onload = () => {
       ctx.drawImage(img, 0, 0);
       URL.revokeObjectURL(img.src);
-      waiting = false;
       frameCount++;
       const now = performance.now();
       if (now - lastFpsTime > 1000) {
@@ -404,7 +412,6 @@ function connect() {
         lastFpsTime = now;
         status.textContent = `${fps.toFixed(1)} fps | ${renderFps} render-fps | ${scenes[activeScene] || ''}`;
       }
-      requestFrame();
     };
     img.src = URL.createObjectURL(jpegBlob);
   };
