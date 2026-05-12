@@ -97,7 +97,7 @@
 <div id="hud">
   Drag: rotate | Arrows: look<br>
   WASD: move | Q/E: up/down<br>
-  [ / ]: speed | Shift: fast | R: reset<br>
+  [ / ]: speed | R: reset<br>
   Number keys: switch scene
 </div>
 <div id="scenes"></div>
@@ -167,13 +167,12 @@ const status = document.getElementById('status');
 const scenesDiv = document.getElementById('scenes');
 
 const WS_URL = 'ws://localhost:8765';
-let moveSpeed = 0.04;
+let moveSpeed = 0.01;
 const ROT_SPEED = 0.006;
-const ARROW_ROT_SPEED = 0.06;
+const ARROW_ROT_SPEED = 0.01;
 const SCROLL_SPEED = 0.15;
 const DISPLAY_SCALE = 1;
 const SPEED_STEP = 1.3;
-const SHIFT_MULT = 3;
 let speedFadeTimer = null;
 
 let ws = null;
@@ -274,7 +273,7 @@ function updateInputs() {
   const R = buildRotation(sceneUp, camYaw, camPitch);
   const fwd = [R[6], R[7], R[8]];
   const right = [R[0], R[1], R[2]];
-  const speed = keys['Shift'] ? moveSpeed * SHIFT_MULT : moveSpeed;
+  const speed = moveSpeed;
 
   if (keys['w'] || keys['W']) {
     camPos[0] += fwd[0] * speed;
@@ -477,7 +476,7 @@ document.addEventListener('mousemove', (e) => {
   const dy = e.clientY - lastMouse[1];
   lastMouse = [e.clientX, e.clientY];
   camYaw += dx * ROT_SPEED;
-  camPitch += dy * ROT_SPEED;
+  camPitch -= dy * ROT_SPEED;
   camPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, camPitch));
 });
 

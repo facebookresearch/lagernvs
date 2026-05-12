@@ -21,3 +21,4 @@ tqdm
 pandas
 # Additional dependencies for interactive viewer (run_interactive.py)
 open3d>=0.17.0
+websockets>=16.0

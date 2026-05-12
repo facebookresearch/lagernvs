@@ -19,7 +19,7 @@
 # Usage (run on the GPU server):
 #   python run_interactive_server.py                        # all scenes in test_data/
 #   python run_interactive_server.py --scenes my_scene      # specific scene(s)
-#   python run_interactive_server.py --square               # 512x512 (higher quality, slower)
+#   python run_interactive_server.py --wide                 # 288x512 (lower quality, faster)
 #   python run_interactive_server.py --jpeg_quality 95      # higher quality JPEG (larger frames)
 #
 # Access (from your local machine):
@@ -54,12 +54,6 @@ import os
 import time
 import warnings
 
-try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-except ImportError:
-    pass
-
 import numpy as np
 import websockets
 from PIL import Image
@@ -75,7 +69,6 @@ import torch
 torch.backends.cudnn.benchmark = True
 
 from models.layers.attention import Attention
-
 from run_interactive import (
     find_scene_dirs,
     load_model,
@@ -83,11 +76,12 @@ from run_interactive import (
     make_plucker_rays,
     prepare_scene,
     render_single_view,
-    RES_SQUARE,
+    RES_IPHONE,
     RES_WIDE,
     SCRIPT_DIR,
     setup_device,
 )
+
 
 class FastPluckerRays:
     """Pre-computes static ray geometry on GPU; per-frame cost is just a matmul."""
@@ -139,7 +133,7 @@ def _encode_jpeg_np(img_np, quality):
 
 def main(args):
     device, dtype = setup_device()
-    res = RES_SQUARE if args.square else RES_WIDE
+    res = RES_WIDE if args.wide else RES_IPHONE
     H, W = res
     test_data_dir = os.path.join(SCRIPT_DIR, "test_data")
 
@@ -160,11 +154,15 @@ def main(args):
     if fa3:
         print(f"  Using Flash Attention 3 (SM {major}.{minor})")
     elif major >= 9:
-        print(f"  Flash Attention 3 not available in this xformers build, "
-              f"falling back to Flash Attention 2 (SM {major}.{minor})")
+        print(
+            f"  Flash Attention 3 not available in this xformers build, "
+            f"falling back to Flash Attention 2 (SM {major}.{minor})"
+        )
     else:
-        print(f"  Using Flash Attention 2 (SM {major}.{minor}, "
-              f"Flash Attention 3 requires SM >= 9.0)")
+        print(
+            f"  Using Flash Attention 2 (SM {major}.{minor}, "
+            f"Flash Attention 3 requires SM >= 9.0)"
+        )
     print(f"  LagerNVS loaded")
 
     print("Loading VGGT model...")
@@ -213,9 +211,9 @@ def main(args):
                 async for message in websocket:
                     msg = json.loads(message)
                     if msg["type"] == "pose":
-                        latest_w2c[:] = np.array(
-                            msg["w2c"], dtype=np.float64
-                        ).reshape(4, 4)
+                        latest_w2c[:] = np.array(msg["w2c"], dtype=np.float64).reshape(
+                            4, 4
+                        )
                         pose_updated.set()
                     elif msg["type"] == "scene":
                         idx = msg["index"]
@@ -318,7 +316,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--scenes", nargs="*", default=None)
     p.add_argument("--port", type=int, default=8765)
-    p.add_argument("--square", action="store_true")
+    p.add_argument("--wide", action="store_true")
     p.add_argument("--jpeg_quality", type=int, default=85)
     p.add_argument(
         "--model_repo",
