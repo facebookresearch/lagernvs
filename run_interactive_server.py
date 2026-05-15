@@ -46,6 +46,7 @@
 #   - See run_interactive.py and README.md for additional model limitations.
 
 import asyncio
+import base64
 import concurrent.futures
 import io
 import json
@@ -167,6 +168,19 @@ class FastPluckerRays:
         return plucker.permute(2, 0, 1).unsqueeze(0).unsqueeze(0)
 
 
+def make_scene_thumbnails(image_paths, thumb_w=80):
+    thumbs = []
+    for p in image_paths:
+        img = Image.open(p).convert("RGB")
+        w, h = img.size
+        thumb_h = max(1, int(thumb_w * h / w))
+        img = img.resize((thumb_w, thumb_h), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=70)
+        thumbs.append(base64.b64encode(buf.getvalue()).decode())
+    return thumbs
+
+
 def frame_to_jpeg(frame_tensor, quality=85):
     img_np = frame_tensor.clamp(0, 1).permute(1, 2, 0).mul(255).byte().cpu().numpy()
     buf = io.BytesIO()
@@ -251,6 +265,8 @@ def main(args):
                     "up_vectors": [sc["up_vector"] for sc in scenes],
                     "width": W,
                     "height": H,
+                    "scene_thumbnails": [make_scene_thumbnails(sc["image_paths"]) for sc in scenes],
+                    "scene_image_counts": [len(sc["image_paths"]) for sc in scenes],
                 }
             )
         )

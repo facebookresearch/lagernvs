@@ -329,6 +329,7 @@ def prepare_scene(scene_name, scene_dir, model, vggt_model, device, dtype, res):
         "K_np": K.numpy(),
         "rec_tokens": rec_tokens,
         "up_vector": up_avg,
+        "image_paths": image_paths,
     }
 
 

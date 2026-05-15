@@ -88,6 +88,36 @@
     pointer-events: none;
   }
   #speed-indicator.visible { opacity: 0.6; }
+
+  #input-panel {
+    position: fixed;
+    top: 115px;
+    left: 10px;
+    font-size: 11px;
+    max-height: calc(100vh - 265px);
+    overflow-y: auto;
+    pointer-events: none;
+    display: none;
+  }
+  #input-panel-header {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.4;
+    margin-bottom: 6px;
+  }
+  #input-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 80px);
+    gap: 4px;
+  }
+  #input-grid img {
+    width: 80px;
+    height: auto;
+    border-radius: 3px;
+    display: block;
+    opacity: 0.85;
+  }
 </style>
 </head>
 <body>
@@ -103,6 +133,10 @@
 <div id="scenes"></div>
 <div id="status">Connecting...</div>
 <div id="speed-indicator"></div>
+<div id="input-panel">
+  <div id="input-panel-header">Input Images</div>
+  <div id="input-grid"></div>
+</div>
 
 <!-- Movement controls (bottom-left) -->
 <div id="controls-move" class="controls-group">
@@ -179,6 +213,8 @@ let ws = null;
 let width = 512, height = 288;
 let scenes = [];
 let sceneUpVectors = [];
+let sceneThumbnails = [];
+let sceneImageCounts = [];
 let activeScene = 0;
 let frameCount = 0;
 let lastFpsTime = performance.now();
@@ -357,6 +393,16 @@ function updateSceneList() {
   ).join('');
 }
 
+function updateInputPanel(idx) {
+  const panel = document.getElementById('input-panel');
+  const grid = document.getElementById('input-grid');
+  const thumbs = sceneThumbnails[idx] || [];
+  grid.innerHTML = thumbs
+    .map(b64 => `<img src="data:image/jpeg;base64,${b64}" alt="">`)
+    .join('');
+  panel.style.display = thumbs.length > 0 ? 'block' : 'none';
+}
+
 function connect() {
   ws = new WebSocket(WS_URL);
   ws.binaryType = 'blob';
@@ -371,6 +417,8 @@ function connect() {
       if (msg.type === 'init') {
         scenes = msg.scenes;
         sceneUpVectors = msg.up_vectors || scenes.map(() => [0, -1, 0]);
+        sceneThumbnails = msg.scene_thumbnails || [];
+        sceneImageCounts = msg.scene_image_counts || [];
         sceneUp = sceneUpVectors[0] || [0, -1, 0];
         resetCamera();
         width = msg.width;
@@ -380,12 +428,14 @@ function connect() {
         canvas.style.width = (width * DISPLAY_SCALE) + 'px';
         canvas.style.height = (height * DISPLAY_SCALE) + 'px';
         updateSceneList();
+        updateInputPanel(0);
         status.textContent = 'Ready';
         startPoseLoop();
       } else if (msg.type === 'scene_ack') {
         activeScene = msg.index;
         sceneUp = sceneUpVectors[activeScene] || [0, -1, 0];
         updateSceneList();
+        updateInputPanel(activeScene);
       }
       return;
     }
@@ -409,7 +459,8 @@ function connect() {
         fps = frameCount / ((now - lastFpsTime) / 1000);
         frameCount = 0;
         lastFpsTime = now;
-        status.textContent = `${fps.toFixed(1)} fps | ${renderFps} render-fps | ${scenes[activeScene] || ''}`;
+        const imgCount = sceneImageCounts[activeScene] || 0;
+        status.textContent = `${fps.toFixed(1)} fps | ${renderFps} render-fps | ${scenes[activeScene] || ''} | ${imgCount} images`;
       }
     };
     img.src = URL.createObjectURL(jpegBlob);
