@@ -83,6 +83,55 @@ from run_interactive import (
 )
 
 
+class CUDAGraphRenderer:
+    """
+    Per-scene CUDA graph renderer.
+
+    The render loop calls model.renderer() with ~200 individual GPU kernel
+    launches (12 transformer blocks × attentions + MLPs). Each launch briefly
+    needs the Python GIL to dispatch, which contends with the concurrent JPEG
+    encoding thread — inflating render time from ~23ms to ~61ms.
+
+    This class captures the entire model.renderer() call as a CUDA graph once
+    per scene, then each frame executes:
+      1. rays_static.copy_(new_rays)  — one async GPU D2D copy
+      2. graph.replay()               — replays the captured kernel sequence
+                                        with zero Python dispatch overhead
+
+    Pre-warming (n_warmup frames before capture) also settles cuDNN kernel
+    selection, fixing the first-frame spike caused by benchmark=True.
+    """
+
+    def __init__(self, model, rec_tokens, fast_rays_fn, device, dtype, n_warmup=30):
+        self._fast_rays = fast_rays_fn
+        self._device = device
+
+        dummy_w2c = np.eye(4, dtype=np.float64)
+        rays_ref = fast_rays_fn(dummy_w2c)
+
+        # Warmup before capture so cuDNN has selected its kernels.
+        for _ in range(n_warmup):
+            with torch.no_grad(), torch.amp.autocast(device_type="cuda", dtype=dtype):
+                model.renderer(rec_tokens, rays_ref)
+        torch.cuda.synchronize()
+
+        # Static buffers — the graph captures data pointers, not values.
+        # Per-frame we copy new ray data into rays_static, then replay.
+        self._rays_static = rays_ref.clone()
+        self._rec_static = rec_tokens.clone()
+
+        self._graph = torch.cuda.CUDAGraph()
+        with torch.no_grad(), torch.amp.autocast(device_type="cuda", dtype=dtype):
+            with torch.cuda.graph(self._graph):
+                self._output = model.renderer(self._rec_static, self._rays_static)
+
+    def render(self, w2c_np):
+        """Returns a [C, H, W] GPU tensor rendered from the given w2c pose."""
+        self._rays_static.copy_(self._fast_rays(w2c_np))
+        self._graph.replay()
+        return self._output[0, 0]
+
+
 class FastPluckerRays:
     """Pre-computes static ray geometry on GPU; per-frame cost is just a matmul."""
 
@@ -180,6 +229,12 @@ def main(args):
 
     scene_names = [sc["name"] for sc in scenes]
     fast_rays = [FastPluckerRays(sc["K_np"], res, device) for sc in scenes]
+
+    print("Building CUDA-graph renderers (warmup + capture)...")
+    graph_renderers = [
+        CUDAGraphRenderer(model, sc["rec_tokens"], fr, device, dtype)
+        for sc, fr in zip(scenes, fast_rays)
+    ]
     print(f"\nScenes ready: {scene_names}")
 
     active_scene_idx = 0
@@ -244,8 +299,7 @@ def main(args):
                 sc = scenes[idx]
 
                 t0 = time.time()
-                rays = fast_rays[idx](w2c)
-                frame = render_single_view(model, sc["rec_tokens"], rays, dtype)
+                frame = graph_renderers[idx].render(w2c)
                 img_np = (
                     frame.clamp(0, 1).permute(1, 2, 0).mul(255).byte().cpu().numpy()
                 )

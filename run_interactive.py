@@ -245,7 +245,7 @@ def precompute_encoder(model, images, cam_tokens, device, dtype):
 def render_single_view(model, rec_tokens, target_rays, dtype):
     with torch.no_grad(), torch.amp.autocast(device_type="cuda", dtype=dtype):
         return model.renderer(
-            einops.repeat(rec_tokens, "b np d -> (b v) np d", v=target_rays.shape[1]),
+            rec_tokens,
             target_rays,
         )[0, 0]
 
