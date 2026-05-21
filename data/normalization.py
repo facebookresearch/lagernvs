@@ -80,6 +80,17 @@ def build_cam_cond(
     Returns:
         (cam_enc, cam_cond_token): Plucker rays [V, 6, H, W] and tokens [V, 13].
     """
+
+    zero_out_this_instance = np.random.uniform() <= zero_out_cam_cond_p
+    if zero_out_this_instance:
+        H, W = tgt_hw
+        nominal = torch.tensor(
+            [float(W), float(W), float(W) / 2.0, float(H) / 2.0],
+            dtype=intrinsics_fxfycxcy_px.dtype,
+            device=intrinsics_fxfycxcy_px.device,
+        )
+        intrinsics_fxfycxcy_px = nominal.unsqueeze(0).expand_as(intrinsics_fxfycxcy_px)
+
     cam_cond_token = pose_enc.extri_intri_to_pose_encoding(
         c2w_poses.unsqueeze(0),
         intrinsics_fxfycxcy_px.unsqueeze(0),
@@ -89,7 +100,6 @@ def build_cam_cond(
     Ks = camera_utils.get_K_matrices(intrinsics_fxfycxcy_px)
     cam_enc = camera_utils.compute_plucker_rays(c2w_poses, Ks, tgt_hw)
 
-    zero_out_this_instance = np.random.uniform() <= zero_out_cam_cond_p
     if zero_out_this_instance:
         cam_enc[:num_cond_views] *= 0.0
         cam_cond_token[:num_cond_views] *= 0.0
