@@ -14,9 +14,9 @@ LagerNVS is a feed-forward model for novel view synthesis (NVS) that generates n
 
 ## Evaluation Results
 
-All results are for the **General model** (`lagernvs_general_512`) at 512×512 resolution.
+Below results are for the **General model v2** (`lagernvs_general_512`) at 512×512 resolution.
 
-### Re10k Dataset
+### Re10k Dataset (v2)
 
 | Views | Posed | Split | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
 |-------|-------|-------|--------|--------|---------|
@@ -25,7 +25,7 @@ All results are for the **General model** (`lagernvs_general_512`) at 512×512 r
 | 2 | ✓ | FLARE | 26.36 | 0.866 | 0.190 |
 | 2 | ✗ | FLARE | 25.11 | 0.833 | 0.210 |
 
-### DL3DV Dataset
+### DL3DV Dataset (v2)
 
 | Views | Posed | Split | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
 |-------|-------|-------|--------|--------|---------|
@@ -38,7 +38,7 @@ All results are for the **General model** (`lagernvs_general_512`) at 512×512 r
 | 16 | ✓ | Rayzer | 25.20 | 0.776 | 0.174 |
 | 16 | ✗ | Rayzer | 23.31 | 0.713 | 0.214 |
 
-### CO3D Dataset
+### CO3D Dataset (v2)
 
 | Views | Posed | Split | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
 |-------|-------|-------|--------|--------|---------|
@@ -49,7 +49,7 @@ All results are for the **General model** (`lagernvs_general_512`) at 512×512 r
 | 9 | ✓ | ReconFusion | 24.40 | 0.740 | 0.302 |
 | 9 | ✗ | ReconFusion | 22.05 | 0.689 | 0.365 |
 
-### MipNeRF-360 Dataset
+### MipNeRF-360 Dataset (v2)
 
 | Views | Posed | Split | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
 |-------|-------|-------|--------|--------|---------|
@@ -59,6 +59,35 @@ All results are for the **General model** (`lagernvs_general_512`) at 512×512 r
 | 6 | ✗ | ReconFusion | 18.81 | 0.446 | 0.472 |
 | 9 | ✓ | ReconFusion | 20.19 | 0.487 | 0.412 |
 | 9 | ✗ | ReconFusion | 19.69 | 0.461 | 0.440 |
+
+### Results for the previous checkpoint (`revision="v1"`)
+
+| Dataset | Views | Posed | Split | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
+|---------|-------|-------|-------|--------|--------|---------|
+| Re10k | 2 | ✓ | PixelSplat | 29.05 | 0.901 | 0.147 |
+| Re10k | 2 | ✗ | PixelSplat | 28.28 | 0.885 | 0.155 |
+| Re10k | 2 | ✓ | FLARE | 26.40 | 0.867 | 0.188 |
+| Re10k | 2 | ✗ | FLARE | 25.64 | 0.848 | 0.201 |
+| DL3DV | 2 | ✓ | DepthSplat | 21.77 | 0.692 | 0.287 |
+| DL3DV | 2 | ✗ | DepthSplat | 21.33 | 0.670 | 0.301 |
+| DL3DV | 4 | ✓ | DepthSplat | 24.94 | 0.780 | 0.188 |
+| DL3DV | 4 | ✗ | DepthSplat | 23.99 | 0.744 | 0.206 |
+| DL3DV | 6 | ✓ | DepthSplat | 26.14 | 0.808 | 0.159 |
+| DL3DV | 6 | ✗ | DepthSplat | 24.97 | 0.769 | 0.178 |
+| DL3DV | 16 | ✓ | Rayzer | 25.42 | 0.782 | 0.171 |
+| DL3DV | 16 | ✗ | Rayzer | 23.49 | 0.719 | 0.211 |
+| CO3D | 3 | ✓ | ReconFusion | 21.31 | 0.691 | 0.386 |
+| CO3D | 3 | ✗ | ReconFusion | 20.22 | 0.667 | 0.431 |
+| CO3D | 6 | ✓ | ReconFusion | 23.65 | 0.733 | 0.317 |
+| CO3D | 6 | ✗ | ReconFusion | 21.65 | 0.684 | 0.377 |
+| CO3D | 9 | ✓ | ReconFusion | 24.74 | 0.747 | 0.292 |
+| CO3D | 9 | ✗ | ReconFusion | 22.37 | 0.697 | 0.352 |
+| Mip360 | 3 | ✓ | ReconFusion | 18.08 | 0.434 | 0.497 |
+| Mip360 | 3 | ✗ | ReconFusion | 17.45 | 0.413 | 0.531 |
+| Mip360 | 6 | ✓ | ReconFusion | 19.39 | 0.469 | 0.436 |
+| Mip360 | 6 | ✗ | ReconFusion | 18.97 | 0.447 | 0.466 |
+| Mip360 | 9 | ✓ | ReconFusion | 20.39 | 0.493 | 0.402 |
+| Mip360 | 9 | ✗ | ReconFusion | 19.68 | 0.462 | 0.438 |
 
 ## Notes
 
