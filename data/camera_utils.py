@@ -28,6 +28,27 @@ def get_full_res_crop_dims_constant_ar(orig_hw, tgt_hw):
     return (crop_h, crop_w)
 
 
+def assert_constant_focal_lengths(intrinsics_3x3, tolerance=0.1):
+    """Assert that estimated focal lengths are approximately constant across views.
+
+    Args:
+        intrinsics_3x3: (B, V, 3, 3) intrinsic matrices from VGGT
+        tolerance: maximum allowed relative deviation from the mean
+    """
+    fx = intrinsics_3x3[:, :, 0, 0]
+    fy = intrinsics_3x3[:, :, 1, 1]
+    all_f = torch.cat([fx, fy], dim=-1)
+    avg_f = all_f.mean().item()
+    max_dev = (all_f - avg_f).abs().max().item()
+    assert max_dev / avg_f < tolerance, (
+        f"VGGT estimated focal lengths vary too much across views "
+        f"(max deviation {max_dev/avg_f:.1%} of mean). "
+        f"The model was trained assuming constant focal lengths for all source "
+        f"images, and using varying fields of view will result in poor performance. "
+        f"You can remove this check, but expect degraded results."
+    )
+
+
 def get_K_matrices(fxfycxcy):
     """Convert [V, 4] fxfycxcy tensor to [V, 3, 3] intrinsic matrices."""
     Ks = []

@@ -9,6 +9,7 @@ import math
 import einops
 import torch
 import torch.nn.functional as F
+from data.camera_utils import assert_constant_focal_lengths
 from vggt.models.vggt import VGGT
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
@@ -993,7 +994,13 @@ def _slerp_quaternions(q1, q2, t):
 
 
 def create_target_camera_path(
-    image_names, video_length, num_cond_views, image_size_hw, device, dtype, mode="resize"
+    image_names,
+    video_length,
+    num_cond_views,
+    image_size_hw,
+    device,
+    dtype,
+    mode="resize",
 ):
     """Create a target camera trajectory for rendering novel views.
 
@@ -1049,9 +1056,10 @@ def create_target_camera_path(
     # from VGGT, not its intrinsics — see default intrinsics construction below).
     if pose_enc.dim() == 2:
         pose_enc = pose_enc.unsqueeze(0)
-    extrinsics_w2c, _ = pose_encoding_to_extri_intri(
+    extrinsics_w2c, intrinsics_3x3 = pose_encoding_to_extri_intri(
         pose_enc, image_size_hw=image_size_hw
     )
+    assert_constant_focal_lengths(intrinsics_3x3)
 
     # Use default intrinsics instead of VGGT estimates. VGGT's intrinsics are
     # approximate and can be noisy for few-view inputs. A standard pinhole

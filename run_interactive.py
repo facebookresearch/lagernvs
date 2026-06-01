@@ -93,7 +93,7 @@ if _use_sdpa:
 
     Attention.forward = _sdpa_forward
 
-from data.camera_utils import compute_plucker_rays, get_K_matrices
+from data.camera_utils import assert_constant_focal_lengths, compute_plucker_rays, get_K_matrices
 from models.encoder_decoder import EncDec_VitB8
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import (
@@ -208,6 +208,7 @@ def estimate_poses_vggt(images, vggt_model, device, dtype, res):
     extrinsics_w2c, intrinsics_3x3 = pose_encoding_to_extri_intri(
         pose_enc, image_size_hw=res
     )
+    assert_constant_focal_lengths(intrinsics_3x3)
     S = extrinsics_w2c.shape[1]
     R_c2w = extrinsics_w2c[:, :, :3, :3].transpose(-1, -2)
     t_c2w = -R_c2w @ extrinsics_w2c[:, :, :3, 3:]
