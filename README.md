@@ -19,6 +19,8 @@ LagerNVS is a feed-forward model for novel view synthesis (NVS). Given one or mo
 The model uses 3D biases without explicit 3D representations. The architecture features a large 3D-aware encoder (from VGGT pre-training) to extract scene tokens and a transformer-based renderer that conditions on these tokens via cross-attention to render novel views.
 
 ## Announcements
+[26 Jun 2026] The project ceases to be maintained. For future development, fork the existing repository. For questions, message Stan Szymanowicz.
+
 [22 May 2026] We released a new checkpoint which produces better results for in-the-wild examples where camera intrinsics are unknown, with a marginal drop on benchmarks. The new model should be used as default, and the old checkpoint can be used by reverting the changes from commit `2e21ccd6d8c742de188457ae9ca569877a7e439e` and using the previous checkpoint from HuggingFace with `revision="v1"` . [MODEL_CARD.md](MODEL_CARD.md) has been updated to include the new results. Details of the new model can be found in the paper.
 
 [1 May 2026] We have included a server version of the interactive viewer that can be run on a remote GPU node and streamed to the browser on a local machine. See [Browser Viewer](#browser-viewer-headless-remote-gpu) for details.
